@@ -1,0 +1,11 @@
+.DS_Store
+/target/
+
+# Personal vars-only overrides never enter git (D10).
+envholster.local.toml
+
+# NOTE: never ignore *.holster broadly — the real vault format (secrets.holster,
+# secrets.holster.recovery.age) is git-COMMITTED by design. Test scratch vaults
+# live under std::env::temp_dir(), outside the repo; anything that must live
+# in-repo goes under a dedicated scratch dir:
+/test-scratch/

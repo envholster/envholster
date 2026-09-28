@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # SHA-pinned per SUPPLY_CHAIN.md row 7; the trailing comment is the tag
+      # the SHA was taken from.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Gate G0 diffs Cargo.toml/Cargo.lock against the merge base with
+          # main; a shallow checkout has no such history and G0 refuses.
+          fetch-depth: 0
+          persist-credentials: false
+      - run: rustup show active-toolchain
+      # Tool versions pinned so the gate does not float with each run.
+      - run: cargo install --locked cargo-deny@0.20.2 cargo-audit@0.22.2
+      - name: Install age and jq (macOS)
+        if: runner.os == 'macOS'
+        run: brew install age jq
+      - name: Install age and jq (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y age jq
+      - name: Gate
+        run: ENVHOLSTER_AGE_BIN="$(command -v age)" scripts/gate.sh

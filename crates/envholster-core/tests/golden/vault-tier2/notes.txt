@@ -1,0 +1,6 @@
+The hardware recipient's wrap blobs are STAND-INS: real single-recipient
+binary age files encrypted to a throwaway X25519 key whose secret half was
+discarded at generation time (no hardware plugin exists in CI; the hardware
+unwrap path is covered by the standing human hardware checklist -
+ENVELOPE-SPEC §11.3). Byte-shape and unwrap-loop behavior (NoMatchingKeys
+for every fixture identity) are identical to a real plugin wrap.

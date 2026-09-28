@@ -1,0 +1,25 @@
+[package]
+name = "envholster"
+description = "envholster — replace .env files with a vault you can commit to git (single binary)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "envholster"
+path = "src/main.rs"
+
+[dependencies]
+envholster-core = { workspace = true }
+envholster-mem = { workspace = true }  # SecretBytes for prompt/stdin windows (plan/03 window 8) + harden_process
+age = { workspace = true }             # identity generate/parse, recovery sentinel round-trip
+secrecy = { workspace = true }         # UnlockUi secret prompts (transit only)
+zeroize = { workspace = true }         # transient String hygiene on secret input paths
+toml = { workspace = true }            # manifest only — never an encrypted path (c6/c20)
+clap = { workspace = true }
+anyhow = { workspace = true }
+rpassword = { workspace = true }
+nix = { workspace = true }             # `run`: posix_spawnp with a Zeroizing env vector + waitpid

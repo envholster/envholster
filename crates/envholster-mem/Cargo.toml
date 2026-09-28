@@ -1,0 +1,16 @@
+[package]
+name = "envholster-mem"
+description = "Locked secret memory for envholster: guarded allocation, mlock, closure-only exposure (plan/03-memory)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+memsec = { workspace = true }
+libc = { workspace = true }
+getrandom = { workspace = true }
+zeroize = { workspace = true }
+thiserror = { workspace = true }

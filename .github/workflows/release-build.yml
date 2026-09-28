@@ -1,0 +1,66 @@
+name: Native release build
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+    outputs:
+      sha256:
+        description: Digest produced by this gated native build
+        value: ${{ jobs.build.outputs.sha256 }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ inputs.os }}
+    outputs:
+      sha256: ${{ steps.artifact.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          # The gate runs dependency build scripts; keep the write token out
+          # of .git/config so only the upload step can use it.
+          persist-credentials: false
+      - run: rustup show active-toolchain
+      - run: cargo install --locked cargo-deny@0.20.2 cargo-audit@0.22.2
+      - if: runner.os == 'macOS'
+        run: brew install age jq
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y age jq
+      - name: Complete gate
+        run: ENVHOLSTER_AGE_BIN="$(command -v age)" scripts/gate.sh
+      # Dependency build scripts run here, so this step gets no token.
+      - id: artifact
+        name: Build native binary
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          test "$(rustc -vV | sed -n 's/^host: //p')" = "$RELEASE_TARGET"
+          cargo build --release --locked --bin envholster
+          target/release/envholster --version
+          artifact="$RUNNER_TEMP/envholster-$RELEASE_TAG-$RELEASE_TARGET"
+          cp target/release/envholster "$artifact"
+          printf 'sha256=%s\n' "$(openssl dgst -sha256 "$artifact" | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+      - name: Attach binary to draft
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/envholster-$RELEASE_TAG-$RELEASE_TARGET"

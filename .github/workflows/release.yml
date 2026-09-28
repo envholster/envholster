@@ -1,0 +1,140 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing reviewed version tag (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: source
+        name: Validate reviewed source and create a draft
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          test "v$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml)" = "$RELEASE_TAG"
+          openssl pkey -pubin -in release/public-key.pem -noout
+          printf 'commit=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          printf '%s\n' 'Release candidate. Do not publish until all four native gates, signatures and fresh-machine installation checks pass.' > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "$RELEASE_TAG candidate" --notes-file "$RUNNER_TEMP/release-notes.md"
+
+  mac_arm:
+    needs: prepare
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-build.yml
+    with:
+      commit: ${{ needs.prepare.outputs.commit }}
+      tag: ${{ inputs.tag }}
+      # macos-14 images are retired in November 2026.
+      os: macos-15
+      target: aarch64-apple-darwin
+
+  mac_intel:
+    needs: prepare
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-build.yml
+    with:
+      commit: ${{ needs.prepare.outputs.commit }}
+      tag: ${{ inputs.tag }}
+      os: macos-15-intel
+      target: x86_64-apple-darwin
+
+  linux_arm:
+    needs: prepare
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-build.yml
+    with:
+      commit: ${{ needs.prepare.outputs.commit }}
+      tag: ${{ inputs.tag }}
+      os: ubuntu-22.04-arm
+      target: aarch64-unknown-linux-gnu
+
+  linux_x64:
+    needs: prepare
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-build.yml
+    with:
+      commit: ${{ needs.prepare.outputs.commit }}
+      tag: ${{ inputs.tag }}
+      os: ubuntu-22.04
+      target: x86_64-unknown-linux-gnu
+
+  sign:
+    needs: [prepare, mac_arm, mac_intel, linux_arm, linux_x64]
+    runs-on: ubuntu-22.04
+    environment: release
+    # The OIDC permissions live only here, where no dependency code runs, so a
+    # build script can never mint an attestation.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - name: Sign verified assets and leave draft for publication review
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          MAC_ARM_SHA: ${{ needs.mac_arm.outputs.sha256 }}
+          MAC_INTEL_SHA: ${{ needs.mac_intel.outputs.sha256 }}
+          LINUX_ARM_SHA: ${{ needs.linux_arm.outputs.sha256 }}
+          LINUX_X64_SHA: ${{ needs.linux_x64.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$RELEASE_SIGNING_KEY"
+          signing_key="$RUNNER_TEMP/envholster-release-key.pem"
+          trap 'rm -f "$signing_key"' EXIT
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$signing_key"
+          unset RELEASE_SIGNING_KEY
+          mkdir "$RUNNER_TEMP/envholster-assets"
+          gh release download "$RELEASE_TAG" --pattern "envholster-$RELEASE_TAG-*" --dir "$RUNNER_TEMP/envholster-assets"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          pairs = {"aarch64-apple-darwin": "MAC_ARM_SHA", "x86_64-apple-darwin": "MAC_INTEL_SHA", "aarch64-unknown-linux-gnu": "LINUX_ARM_SHA", "x86_64-unknown-linux-gnu": "LINUX_X64_SHA"}
+          Path(os.environ["RUNNER_TEMP"], "expected-digests.json").write_text(json.dumps({target: os.environ[name] for target, name in pairs.items()}))
+          PY
+          python3 scripts/release-package.py --version "$RELEASE_TAG" --source "$RELEASE_COMMIT" --run-url "https://github.com/envholster/envholster/actions/runs/$GITHUB_RUN_ID" --assets "$RUNNER_TEMP/envholster-assets" --private-key "$signing_key" --public-key release/public-key.pem --expected-digests "$RUNNER_TEMP/expected-digests.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/envholster-assets/install.sh" "$RUNNER_TEMP/envholster-assets/release-public.pem" "$RUNNER_TEMP/envholster-assets/release-manifest.txt" "$RUNNER_TEMP/envholster-assets/release-manifest.sig" "$RUNNER_TEMP/envholster-assets/SHA256SUMS"
+      # Public, keyless provenance for every signed asset. It complements the
+      # RSA manifest; install.sh keeps verifying with OpenSSL alone.
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ runner.temp }}/envholster-assets/SHA256SUMS
+          create-storage-record: false

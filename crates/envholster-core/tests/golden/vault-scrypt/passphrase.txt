@@ -1,0 +1,1 @@
+golden-fixture-passphrase-do-not-reuse

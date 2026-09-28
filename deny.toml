@@ -1,0 +1,50 @@
+# cargo-deny configuration — runs in EVERY gate (plan/04-contracts §4.6,
+# plan/08-delivery). Supply-chain rules: advisories on; crates.io only;
+# license allowlist; bans on the falsified/banned crates.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # proc-macro-error2 (build-time proc-macro under age 0.11.5's i18n-embed-fl)
+    # is unmaintained. Not reachable at runtime; the only fix is upgrading age,
+    # which is a human-approved D12 `=`-pin edit (plan/04-contracts §4.6).
+    # Revisit at the age 0.12 migration.
+    { id = "RUSTSEC-2026-0173", reason = "unmaintained build-time proc-macro in the D12-pinned age 0.11.5 tree; fix requires human-approved age upgrade" },
+]
+
+[licenses]
+version = 2
+# Allowlist covering the current dependency tree; extending it is a
+# human-approved edit like any dependency change.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+]
+
+[bans]
+multiple-versions = "warn"  # two getrandoms (0.4.x ours; 0.2.x under age's rand 0.8) coexist by design (§4.1)
+deny = [
+    # memsec replaces the falsified `secrets` crate (plan/03-memory §3.1, c5);
+    # no C crypto deps in a supply-chain-critical, agent-built repo.
+    { crate = "libsodium-sys" },
+    { crate = "sodiumoxide" },
+    { crate = "secrets" },
+    # No `rand` anywhere in first-party P0 code — nonces/DEKs via
+    # getrandom::fill only (c19). age 0.11 pulls rand 0.8 transitively by
+    # design (§4.1); the wrappers below allow exactly that path and nothing
+    # else.
+    { crate = "rand", wrappers = ["age", "age-core"] },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

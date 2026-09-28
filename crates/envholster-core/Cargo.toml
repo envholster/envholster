@@ -1,0 +1,22 @@
+[package]
+name = "envholster-core"
+description = "envholster vault core: schema-1 envelope, cells, recipients, recovery lockstep (plan/02-envelope, plan/04-contracts)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+envholster-mem = { workspace = true }
+age = { workspace = true }
+chacha20poly1305 = { workspace = true }
+zeroize = { workspace = true }
+secrecy = { workspace = true }
+getrandom = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+serde = { workspace = true }   # manifest only — never in an encrypted path (c6/c20)
+toml = { workspace = true }    # manifest only
+thiserror = { workspace = true }

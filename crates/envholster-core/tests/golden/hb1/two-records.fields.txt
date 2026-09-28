@@ -1,0 +1,41 @@
+two-records.bin — ENVELOPE-SPEC §11.2, field by field (154 bytes)
+
+02 00 00 00                                        record_count = 2
+
+; record 1 — name "ALPHA"
+05 00                                              name_len = 5
+41 4c 50 48 41                                     "ALPHA"
+01                                                 tier = 1
+01                                                 mode = 1 (env-var)
+00                                                 guarantee = 0 (unassigned)
+00 b9 55 69 00 00 00 00                            created_at = 1767225600
+00 b9 55 69 00 00 00 00                            updated_at = 1767225600
+00 b9 55 69 00 00 00 00                            rotated_at = 1767225600
+00                                                 ra_flag = 0 (no rotate_after)
+00 00                                              meta_count = 0
+05 00 00 00                                        value_len = 5
+61 6c 70 68 61                                     value = "alpha"
+
+; record 2 — name "BETA"
+04 00                                              name_len = 4
+42 45 54 41                                        "BETA"
+01                                                 tier = 1
+03                                                 mode = 3 (api-key)
+05                                                 guarantee = 5 (injected-env)
+00 b9 55 69 00 00 00 00                            created_at = 1767225600
+01 b9 55 69 00 00 00 00                            updated_at = 1767225601
+02 b9 55 69 00 00 00 00                            rotated_at = 1767225602
+01                                                 ra_flag = 1
+00 a7 76 00 00 00 00 00                            rotate_after = 7776000
+02 00                                              meta_count = 2
+19 00                                              key_len = 25
+65 6e 76 68 6f 6c 73 74 65 72 2e 6e 65 65 64 73
+2d 72 6f 74 61 74 69 6f 6e                         "envholster.needs-rotation"
+01 00 00 00                                        value_len = 1
+31                                                 "1"
+08 00                                              key_len = 8
+70 72 6f 76 69 64 65 72                            "provider"
+07 00 00 00                                        value_len = 7
+65 78 61 6d 70 6c 65                               "example"
+03 00 00 00                                        value_len = 3
+00 ff 10                                           value (binary)

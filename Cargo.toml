@@ -1,0 +1,51 @@
+[workspace]
+resolver = "2"
+members = ["crates/envholster-mem", "crates/envholster-core", "crates/envholster"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.96"
+license = "Apache-2.0"
+repository = "https://github.com/envholster/envholster"
+
+# The locked dependency set (SUPPLY_CHAIN.md §2). Crypto-adjacent crates carry
+# exact `=` pins (D12); the committed Cargo.lock freezes the rest. Any
+# dependency addition or version change is a human-approved edit here —
+# build agents may not add crates.
+[workspace.dependencies]
+envholster-mem = { path = "crates/envholster-mem" }
+envholster-core = { path = "crates/envholster-core" }
+
+age = { version = "=0.11.5", features = ["armor", "plugin"] }  # ≥0.11.1 mandatory (RUSTSEC-2024-0433); D12 pin at spike-compiled version
+chacha20poly1305 = "=0.10.1" # XChaCha; age requires ^0.10; migrate only when age 0.12 does (D12)
+memsec = "=0.7.0"            # exact; hand-reviewed; replaces falsified `secrets`
+zeroize = { version = "=1.9.0", features = ["derive"] }        # D12 pin at spike-compiled version
+secrecy = "=0.10.3"          # transit only; does NOT mlock (D12)
+getrandom = "=0.4.3"         # nonces/DEKs via fill(); no `rand` (c19); D12
+hmac = "=0.12.1"             # matches age tree; D12 '=' value set from the real-workspace lockfile resolution (0.12.1, 2026-07-16)
+sha2 = "=0.10.9"             # D12 '=' value set from the real-workspace lockfile resolution (0.10.9, 2026-07-16); age's rust-embed i18n path also pulls sha2 0.11.0 transitively — coexists by design
+libc = "0.2.186"
+serde = { version = "1.0.228", features = ["derive"] }  # manifest only
+toml = "1.1.2"
+thiserror = "2.0.18"
+anyhow = "1.0.102"
+clap = { version = "4.6.1", features = ["derive"] }
+rpassword = "7.5.4"
+# `run` spawns the child with nix's SAFE `posix_spawnp` wrapper so the env
+# vector can be `Zeroizing<CString>` entries (std::process::Command copies the
+# environment into buffers it never zeroizes). "process" also covers waitpid.
+# 2026-09-02: features narrowed from ["process", "fs", "socket", "uio"] — the
+# daemon's stdio-FD passing and the --mount FIFO went to tag archive/v0-daemon.
+nix = { version = "=0.31.3", features = ["process"] }
+
+# NOT a dependency change (no crate/version is touched): the vault-scrypt
+# golden fixture (ENVELOPE-SPEC §11.3) unwraps a real scrypt blob at the
+# frozen encrypt-clamp floor log_n = 20; unoptimized scrypt at 2^20 costs tens
+# of seconds per op, so the transitive scrypt crate is opt-compiled in
+# dev/test profiles to keep `cargo test` bounded ("log_n = 20 keeps CI cost
+# bounded" is the spec's stated intent).
+[profile.dev.package.scrypt]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
